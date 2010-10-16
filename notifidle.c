@@ -30,7 +30,7 @@ struct globals {
   .mailbox = "INBOX",
 };
 
-static void ni_imap_cmd(unsigned int server, unsigned short need_tag, const char *fmt, ...){
+static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (callback)(char *), const char *fmt, ...){
   char *command = NULL;
   static unsigned int command_nr = 0;
   va_list ap;
@@ -62,6 +62,13 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, const char
   reply[received] = '\0';
 
   debug("sent %d, received %d [%s]\n", (int)sent, (int)received, reply);
+
+  /* XXX parse OK/NO response */
+  if(callback){
+    callback(reply);
+  }
+
+  free(reply);
 }
 
 static void ni_login(unsigned int server){
@@ -78,17 +85,71 @@ static void ni_login(unsigned int server){
   }
   banner[received] = '\0';
   debug("banner [%s]\n", banner);
+  free(banner);
 
-  ni_imap_cmd(server, 1, "LOGIN %s %s", globals.user, globals.pass);
-  ni_imap_cmd(server, 1, "SELECT %s", globals.mailbox);
+  ni_imap_cmd(server, 1, NULL, "LOGIN %s %s", globals.user, globals.pass);
+  ni_imap_cmd(server, 1, NULL, "SELECT %s", globals.mailbox);
+}
+
+static unsigned long parse_message_id(char * buffer){
+  unsigned long toret = 0;
+
+  sscanf(buffer, "* %lu EXISTS", &toret);
+
+  return toret;
+}
+
+static void parse_headers(char * buffer){
+  debug("<%s>\n", buffer);
+}
+
+static void handle_message(unsigned int server, unsigned long message_id){
+  ni_imap_cmd(server, 1, parse_headers, "FETCH %lu BODY[HEADER.FIELDS (From To Cc Subject List-Id)]", message_id);
 }
 
 static void ni_idle(unsigned int server){
-  ni_imap_cmd(server, 1, "IDLE");
+  ni_imap_cmd(server, 1, NULL, "IDLE");
 
-  /* XXX do stuff here */
+  fd_set read_fds;
+  FD_ZERO(&read_fds);
+  FD_SET(server, &read_fds);
 
-  ni_imap_cmd(server, 0, "DONE");
+  int something;
+  unsigned int recv_size = 1024;
+  char * reply = malloc(recv_size);
+  ssize_t received;
+
+  while( (something = select(server + 1, &read_fds, NULL, NULL, NULL)) != -1 ){
+    if(!FD_ISSET(server, &read_fds))
+      continue;
+
+    while( (received = recv(server, reply, recv_size, MSG_PEEK)) == recv_size ){
+      recv_size *= 1.5;
+      reply = realloc(reply, recv_size);
+    }
+
+    if((received = recv(server, reply, recv_size, 0)) == -1){
+      perror("recv");
+      return;
+    }
+    reply[received] = '\0';
+
+    debug("broke idle [%s]\n", reply);
+
+    unsigned long message_id = parse_message_id(reply);
+    if(!message_id)
+      continue;
+
+    debug("message id [%lu]\n", message_id);
+
+    ni_imap_cmd(server, 0, NULL, "DONE");
+
+    handle_message(server, message_id);
+
+    ni_imap_cmd(server, 1, NULL, "IDLE");
+  }
+
+  ni_imap_cmd(server, 0, NULL, "DONE");
 }
 
 static void notifidle(unsigned int server){
