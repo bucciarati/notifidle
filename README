@@ -1,0 +1,5 @@
+notifidle - IMAP IDLE notification tool
+
+notifidle -h imap.company.com -P 143 -u username -p password
+
+Fernando Vezzosi <buccia@repnz.net>
