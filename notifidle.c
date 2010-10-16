@@ -11,6 +11,8 @@
 
 #include <stdarg.h>
 
+#include <libnotify/notify.h>
+
 #define DEBUG 1
 #ifdef DEBUG
 #  define _debug(fmt) printf(fmt)
@@ -30,7 +32,7 @@ struct globals {
   .mailbox = "INBOX",
 };
 
-static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (callback)(char *), const char *fmt, ...){
+static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (callback)(ssize_t, char *), const char *fmt, ...){
   char *command = NULL;
   static unsigned int command_nr = 0;
   va_list ap;
@@ -65,7 +67,7 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (call
 
   /* XXX parse OK/NO response */
   if(callback){
-    callback(reply);
+    callback(received, reply);
   }
 
   free(reply);
@@ -99,8 +101,43 @@ static unsigned long parse_message_id(char * buffer){
   return toret;
 }
 
-static void parse_headers(char * buffer){
-  debug("<%s>\n", buffer);
+static void parse_headers(ssize_t buf_len, char * buffer){
+  /* TODO: really parse headers */
+  /* XXX: 20: not good */
+  char * new_buffer = malloc(buf_len + 20),
+       * p = buffer,
+       * np = new_buffer;
+
+  while(*p++){
+    switch(*p){
+      case '<':
+        *np++ = '&';
+        *np++ = 'l';
+        *np++ = 't';
+        *np++ = ';';
+        break;
+      case '>':
+        *np++ = '&';
+        *np++ = 'g';
+        *np++ = 't';
+        *np++ = ';';
+        break;
+      default:
+        *np++ = *p;
+        break;
+    }
+  }
+
+  NotifyNotification * note = notify_notification_new(
+    "<span color=\"yellow\">NEW MAIL</span>",
+    new_buffer,
+    "/usr/share/icons/gnome/48x48/stock/net/stock_mail-open.png",
+    NULL
+  );
+  free(new_buffer);
+
+  notify_notification_set_timeout(note, 8000);
+  notify_notification_show(note, NULL);
 }
 
 static void handle_message(unsigned int server, unsigned long message_id){
@@ -149,10 +186,11 @@ static void ni_idle(unsigned int server){
     ni_imap_cmd(server, 1, NULL, "IDLE");
   }
 
-  ni_imap_cmd(server, 0, NULL, "DONE");
+  free(reply);
 }
 
 static void notifidle(unsigned int server){
+  notify_init("notifidle");
   ni_login(server);
   ni_idle(server);
 }
