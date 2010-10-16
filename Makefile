@@ -3,7 +3,7 @@
 CC := $(shell which colorgcc || which cc)
 
 # change -O and -g in the end
-CFLAGS += -O0 -ggdb -W -Wall -Wextra
+CFLAGS += -O0 -ggdb -W -Wall -Wextra -std=c99 -pedantic
 
 .PHONY: all clean
 
