@@ -24,7 +24,11 @@ struct globals {
   char * user;
   char * pass;
   char * mailbox;
-} globals;
+} globals = {
+  .user = NULL,
+  .pass = NULL,
+  .mailbox = "INBOX",
+};
 
 static void ni_imap_cmd(unsigned int server, unsigned short need_tag, const char *fmt, ...){
   char *command = NULL;
@@ -43,7 +47,7 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, const char
 
   ssize_t sent = send(server, command, strlen(command), 0);
 
-  unsigned int recv_size = 2;
+  unsigned int recv_size = 128;
   char * reply = malloc(recv_size);
   ssize_t received;
   while( (received = recv(server, reply, recv_size, MSG_PEEK)) == recv_size ){
@@ -79,10 +83,10 @@ static void notifidle(unsigned int server){
 }
 
 int main (int argc, char * const argv[]){
-  int opt, svc = 14314;
-  char * host;
+  int opt, svc = 143;
+  char * host = "localhost";
 
-  while ( (opt = getopt(argc, argv, "h:P:u:p:")) != -1 ){
+  while ( (opt = getopt(argc, argv, "h:P:u:p:m:")) != -1 ){
     switch (opt){
       case 'h':
         host = optarg;
@@ -97,6 +101,9 @@ int main (int argc, char * const argv[]){
       case 'p':
         globals.pass = strdup(optarg);
         memset(optarg, '*', strlen(optarg));
+        break;
+      case 'm':
+        globals.mailbox = strdup(optarg);
         break;
       default:
         fprintf(stderr, "wtf use with -h host -p port\n");
