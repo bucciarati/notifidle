@@ -65,6 +65,20 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, const char
 }
 
 static void ni_login(unsigned int server){
+  unsigned int banner_size = 128;
+  char * banner = malloc(banner_size);
+  ssize_t received;
+  while( (received = recv(server, banner, banner_size, MSG_PEEK)) == banner_size ){
+    banner_size *= 1.5;
+    banner = realloc(banner, banner_size);
+  }
+  if((received = recv(server, banner, banner_size, 0)) == -1){
+    perror("can't get banner");
+    return;
+  }
+  banner[received] = '\0';
+  debug("banner [%s]\n", banner);
+
   ni_imap_cmd(server, 1, "LOGIN %s %s", globals.user, globals.pass);
   ni_imap_cmd(server, 1, "SELECT %s", globals.mailbox);
 }
