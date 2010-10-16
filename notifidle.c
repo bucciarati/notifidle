@@ -106,10 +106,15 @@ int main (int argc, char * const argv[]){
         globals.mailbox = strdup(optarg);
         break;
       default:
-        fprintf(stderr, "wtf use with -h host -p port\n");
+        fprintf(stderr, "wtf?  use with -h host -P port -u user -p pass -m mailbox\n");
         exit(1);
         break;
     }
+  }
+
+  if(!globals.user || !globals.pass){
+    fprintf(stderr, "missing one of -u user -p pass\n");
+    exit(1);
   }
 
   struct hostent *he;
