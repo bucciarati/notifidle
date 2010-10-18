@@ -48,6 +48,7 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (call
   }
 
   ssize_t sent = send(server, command, strlen(command), 0);
+  free(command);
 
   unsigned int recv_size = 128;
   char * reply = malloc(recv_size);
