@@ -1,6 +1,7 @@
 notifidle - IMAP IDLE notification tool
 
-building requires libnotify-dev
+sudo aptitude install libnotify-dev libglib2.0-dev
+
 
 notifidle -h imap.company.com -P 143 -u username -p password -m INBOX
 

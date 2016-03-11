@@ -132,8 +132,7 @@ static void parse_headers(ssize_t buf_len, char * buffer){
   NotifyNotification * note = notify_notification_new(
     "<span color=\"yellow\">NEW MAIL</span>",
     new_buffer,
-    "/usr/share/icons/gnome/48x48/stock/net/stock_mail-open.png",
-    NULL
+    "/usr/share/icons/gnome/48x48/stock/net/stock_mail-open.png"
   );
   free(new_buffer);
 
