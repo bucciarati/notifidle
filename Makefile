@@ -25,3 +25,6 @@ all: notifidle
 
 clean:
 	$(RM) notifidle
+
+test-run: all
+	./notifidle -h localhost -P 50993

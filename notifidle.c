@@ -23,14 +23,32 @@
 #endif
 
 struct globals {
+  char * host;
   char * user;
   char * pass;
   char * mailbox;
+  unsigned int port;
+  int fd;
 } globals = {
-  .user = NULL,
-  .pass = NULL,
+  .host = "mail.megacorp.com",
+  .user = "johnny",
+  .pass = "hunter2",
   .mailbox = "INBOX",
+  .port = 143,
+  .fd = -1,
 };
+
+typedef struct ni_line {
+  char * data;
+} ni_line;
+
+static void handle_login_failure(ssize_t buf_len, char * buffer){
+  /* XXX */
+}
+
+static void handle_examine_failure(ssize_t buf_len, char * buffer){
+  /* ni_line response_lines[] = ni_parse_response_lines(buf_len, buffer); */
+}
 
 static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (callback)(ssize_t, char *), const char *fmt, ...){
   char *command = NULL;
@@ -52,23 +70,23 @@ static void ni_imap_cmd(unsigned int server, unsigned short need_tag, void (call
 
   unsigned int recv_size = 128;
   char * reply = malloc(recv_size);
-  ssize_t received;
-  while( (received = recv(server, reply, recv_size, MSG_PEEK)) == recv_size ){
+  ssize_t received_bytes;
+  while( (received_bytes = recv(server, reply, recv_size, MSG_PEEK)) == recv_size ){
     recv_size *= 1.5;
     reply = realloc(reply, recv_size);
   }
 
-  if((received = recv(server, reply, recv_size, 0)) == -1){
+  if((received_bytes = recv(server, reply, recv_size, 0)) == -1){
     perror("recv");
     return;
   }
-  reply[received] = '\0';
+  reply[received_bytes] = '\0';
 
-  debug("sent %d, received %d [%s]\n", (int)sent, (int)received, reply);
+  debug("sent %d, received %d [%s]\n", (int)sent, (int)received_bytes, reply);
 
   /* XXX parse OK/NO response */
   if(callback){
-    callback(received, reply);
+    callback(received_bytes, reply);
   }
 
   free(reply);
@@ -90,8 +108,8 @@ static void ni_login(unsigned int server){
   debug("banner [%s]\n", banner);
   free(banner);
 
-  ni_imap_cmd(server, 1, NULL, "LOGIN %s %s", globals.user, globals.pass);
-  ni_imap_cmd(server, 1, NULL, "SELECT %s", globals.mailbox);
+  ni_imap_cmd(server, 1, handle_login_failure, "LOGIN %s %s", globals.user, globals.pass);
+  ni_imap_cmd(server, 1, handle_examine_failure, "EXAMINE %s", globals.mailbox);
 }
 
 static unsigned long parse_message_id(char * buffer){
@@ -197,12 +215,11 @@ static void notifidle(unsigned int server){
 
 int main (int argc, char * const argv[]){
   int opt, svc = 143;
-  char * host = "localhost";
 
   while ( (opt = getopt(argc, argv, "h:P:u:p:m:")) != -1 ){
     switch (opt){
       case 'h':
-        host = optarg;
+        globals.host = strdup(optarg);
         break;
       case 'P':
         svc = atoi(optarg);
@@ -218,6 +235,9 @@ int main (int argc, char * const argv[]){
       case 'm':
         globals.mailbox = strdup(optarg);
         break;
+      case 'f':
+        globals.fd = atoi(optarg);
+        break;
       default:
         fprintf(stderr, "wtf?  use with -h host -P port -u user -p pass -m mailbox\n");
         exit(1);
@@ -230,27 +250,32 @@ int main (int argc, char * const argv[]){
     exit(1);
   }
 
-  struct hostent *he;
-  struct sockaddr_in servr = {
-    .sin_family = AF_INET,
-    .sin_port = htons(svc),
-  };
+  if (globals.fd == -1){
+    struct hostent *he;
+    struct sockaddr_in servr = {
+      .sin_family = AF_INET,
+      .sin_port = htons(svc),
+    };
 
-  if ( (he = gethostbyname(host)) == NULL ){
-    fprintf(stderr, "gethostbyname failed\n");
-    exit(1);
+    if ( (he = gethostbyname(globals.host)) == NULL ){
+      fprintf(stderr, "gethostbyname failed\n");
+      exit(1);
+    }
+
+    memcpy(&servr.sin_addr, he->h_addr_list[0], he->h_length);
+
+    unsigned int s = socket(AF_INET, SOCK_STREAM, 0);
+
+    debug("connecting to %s:%u...\n", globals.host, svc);
+    if (connect(s, (struct sockaddr *) &servr, sizeof(servr))){
+      fprintf(stderr, "connect failed\n");
+      exit(1);
+    }
+  } else {
   }
 
-  memcpy(&servr.sin_addr, he->h_addr_list[0], he->h_length);
-
-  unsigned int s = socket(AF_INET, SOCK_STREAM, 0);
-
-  if (connect(s, (struct sockaddr *) &servr, sizeof(servr))){
-    fprintf(stderr, "connect failed\n");
-    exit(1);
-  }
-
-  notifidle(s);
+  debug("connected on fd %u\n", globals.fd);
+  notifidle(globals.fd);
 
   return 0;
 }
